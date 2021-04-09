@@ -61,24 +61,22 @@ progress_loop(N, Bound) ->
 
 %% break_md5/2 iterates checking the possible passwords
 
+break_md5(N, N, Server_Pid) -> Server_Pid! {exit, self()};
 break_md5(N, Bound, Server_Pid) ->
     receive
-        [] -> 
-            Server_Pid! {exit, self()};
-        Hashes when N < Bound ->
+        [] -> Server_Pid! {exit, self()};
+        Hashes ->
             Pass = num_to_pass(N),
             Hash = crypto:hash(md5, Pass),
             Num_Hash = binary:decode_unsigned(Hash),
             case lists:member(Num_Hash, Hashes) of
                 true ->
                     io:format("\e[2K\r~.16B: ~s~n", [Num_Hash, Pass]),
-                    Server_Pid! {Num_Hash, self()};
+                    Server_Pid! {found, self(), Num_Hash};
                 false ->
                     Server_Pid! {not_found, self()}
             end,
-            break_md5(N+1, Bound, Server_Pid);
-        _ ->
-            Server_Pid! {exit, self()}
+            break_md5(N+1, Bound, Server_Pid)
     end.
 
 %% Break a list of hashes
@@ -105,21 +103,22 @@ init_proc(K, Num_Hashes, Proc_Bound, Rem, Server_Pid) ->
             [spawn(?MODULE, break_md5, [K*Proc_Bound, (K+1)*Proc_Bound, Server_Pid]) |
                 init_proc(K+1, Num_Hashes, Proc_Bound, Rem, Server_Pid)]
     end.
+
 break_md5_server(_, _, [], _) -> ok;
 break_md5_server(_, [], Num_Hashes, _) -> {not_found, Num_Hashes};
 break_md5_server(N, Proc_List, Num_Hashes, Progress_Pid) ->
     if N rem ?UPDATE_BAR_GAP == 0 ->
             Progress_Pid ! {progress_report, ?UPDATE_BAR_GAP};
-       true -> ok
+            true -> ok
     end,
     receive
         {not_found, Proc_Pid} -> 
             Proc_Pid! Num_Hashes,
             break_md5_server(N+1, Proc_List, Num_Hashes, Progress_Pid);
-        {exit, Proc_Pid} ->
-            break_md5_server(N+1, lists:delete(Proc_Pid, Proc_List), Num_Hashes, Progress_Pid);
-        {Hash, Proc_Pid} ->
+        {found, Proc_Pid, Hash} ->
             Next_Hashes = lists:delete(Hash, Num_Hashes),
             Proc_Pid! Next_Hashes,
-            break_md5_server(N+1, Proc_List, Next_Hashes, Progress_Pid)
+            break_md5_server(N+1, Proc_List, Next_Hashes, Progress_Pid);
+        {exit, Proc_Pid} ->
+            break_md5_server(N+1, lists:delete(Proc_Pid, Proc_List), Num_Hashes, Progress_Pid)
     end.
