@@ -2,7 +2,7 @@
 -define(PASS_LEN, 6).
 -define(UPDATE_BAR_GAP, 1000).
 -define(BAR_SIZE, 40).
--define(NPROCS, 10).
+-define(NPROCS, 2).
 
 -export([break_md5s/1, break_md5/1, break_md5/3, pass_to_num/1, num_to_pass/1]).
 -export([progress_loop/2]).
@@ -104,7 +104,7 @@ init_proc(K, Num_Hashes, Proc_Bound, Rem, Server_Pid) ->
                 init_proc(K+1, Num_Hashes, Proc_Bound, Rem, Server_Pid)]
     end.
 
-break_md5_server(_, _, [], _) -> ok;
+break_md5_server(_, [], [], _) -> ok;
 break_md5_server(_, [], Num_Hashes, _) -> {not_found, Num_Hashes};
 break_md5_server(N, Proc_List, Num_Hashes, Progress_Pid) ->
     if N rem ?UPDATE_BAR_GAP == 0 ->
